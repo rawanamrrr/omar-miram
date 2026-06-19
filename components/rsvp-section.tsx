@@ -1,0 +1,396 @@
+"use client"
+
+import { useState, useRef, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from '@/lib/translations'
+
+export default function RSVPSection() {
+  const t = useTranslation()
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [name, setName] = useState('')
+  const [attending, setAttending] = useState<'yes' | 'no' | ''>('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [message, setMessage] = useState({ text: '', type: '' as 'success' | 'error' | 'info' | '' })
+  
+  // Message Section States
+  const [messageType, setMessageType] = useState<'drawn' | 'written'>('written')
+  const [writtenText, setWrittenText] = useState('')
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [currentColor, setCurrentColor] = useState('#000000')
+  const [currentWidth, setCurrentWidth] = useState(3)
+  const [history, setHistory] = useState<string[]>([])
+  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null)
+  
+  const historyRef = useRef(history)
+  useEffect(() => {
+    historyRef.current = history
+  }, [history])
+  
+  const points = useRef<Array<{x: number, y: number, pressure: number}>>([])
+  const rafId = useRef<number | null>(null)
+  const lastWidth = useRef(3)
+  const lastTouchTime = useRef(0)
+  const isProcessingStop = useRef(false)
+  const hasSavedToHistory = useRef(false)
+  const canvasStateBeforeDrawing = useRef<ImageData | null>(null)
+
+  const penColors = [
+    { color: '#000000', name: t('colorBlack') },
+    { color: '#EF4444', name: t('colorRed') },
+    { color: '#3B82F6', name: t('colorBlue') },
+    { color: '#10B981', name: t('colorGreen') },
+    { color: '#8B5CF6', name: t('colorPurple') },
+    { color: '#F59E0B', name: t('colorOrange') },
+  ]
+
+  // Initialize canvas
+  useEffect(() => {
+    if (messageType !== 'drawn' || !canvasRef.current) return
+
+    const canvas = canvasRef.current
+    const container = canvas.parentElement
+    if (container) {
+      canvas.width = container.clientWidth
+      canvas.height = 300
+    }
+
+    const context = canvas.getContext('2d')
+    if (context) {
+      context.lineCap = 'round'
+      context.lineJoin = 'round'
+      context.strokeStyle = currentColor
+      context.lineWidth = currentWidth + 2
+      context.fillStyle = 'white'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      setCtx(context)
+      
+      if (history.length > 0) {
+        const img = new window.Image()
+        img.onload = () => context.drawImage(img, 0, 0)
+        img.src = history[history.length - 1]
+      } else if (canvasRef.current && history.length === 0) {
+        setHistory([canvas.toDataURL()])
+      }
+    }
+  }, [messageType])
+
+  const getPressure = (e: any): number => {
+    if (e.force) return Math.min(Math.max(e.force, 0.1), 1)
+    return 0.5
+  }
+
+  const getCanvasCoordinates = (e: any) => {
+    if (!canvasRef.current) return null
+    const rect = canvasRef.current.getBoundingClientRect()
+    const touch = e.touches ? e.touches[0] : e
+    return {
+      x: (touch.clientX - rect.left) * (canvasRef.current.width / rect.width),
+      y: (touch.clientY - rect.top) * (canvasRef.current.height / rect.height)
+    }
+  }
+
+  const drawSmoothLine = () => {
+    if (!ctx || !canvasRef.current || points.current.length < 2) return
+    
+    // Restore canvas to clean state before rendering the stroke path
+    if (canvasStateBeforeDrawing.current) {
+      ctx.putImageData(canvasStateBeforeDrawing.current, 0, 0);
+    }
+
+    const pts = points.current
+    ctx.beginPath()
+    ctx.moveTo(pts[0].x, pts[0].y)
+    
+    if (pts.length === 2) {
+      ctx.lineTo(pts[1].x, pts[1].y)
+    } else {
+      for (let i = 1; i < pts.length - 2; i++) {
+        const xc = (pts[i].x + pts[i + 1].x) / 2
+        const yc = (pts[i].y + pts[i + 1].y) / 2
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc)
+      }
+      if (pts.length > 2) {
+        const i = pts.length - 2
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
+      }
+    }
+    
+    ctx.strokeStyle = currentColor
+    ctx.lineWidth = currentWidth + 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+  }
+
+  const startDrawing = (e: any) => {
+    e.preventDefault()
+    if (Date.now() - lastTouchTime.current < 500 && !e.touches) return
+    if (e.touches) lastTouchTime.current = Date.now()
+    
+    const coords = getCanvasCoordinates(e)
+    if (!coords || !ctx || !canvasRef.current) return
+
+    canvasStateBeforeDrawing.current = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height)
+    points.current = [{ ...coords, pressure: getPressure(e) }]
+    setIsDrawing(true)
+    hasSavedToHistory.current = false
+    isProcessingStop.current = false
+
+    const loop = () => {
+      if (points.current.length >= 2) drawSmoothLine()
+      rafId.current = requestAnimationFrame(loop)
+    }
+    rafId.current = requestAnimationFrame(loop)
+  }
+
+  const draw = (e: any) => {
+    e.preventDefault()
+    if (!isDrawing) return
+    const coords = getCanvasCoordinates(e)
+    if (coords) points.current.push({ ...coords, pressure: getPressure(e) })
+  }
+
+  const stopDrawing = () => {
+    if (!isDrawing || isProcessingStop.current) return
+    isProcessingStop.current = true
+    setIsDrawing(false)
+    if (rafId.current) cancelAnimationFrame(rafId.current)
+
+    // Determine if this was a dot (tap) or a stroke (drag)
+    const isDot = points.current.length === 1 || (points.current.length === 2 && Math.hypot(points.current[0].x - points.current[1].x, points.current[0].y - points.current[1].y) < 5);
+    
+    if (ctx && isDot) {
+      if (canvasStateBeforeDrawing.current) {
+        ctx.putImageData(canvasStateBeforeDrawing.current, 0, 0)
+      }
+      const point = points.current[0]
+      ctx.beginPath()
+      ctx.arc(point.x, point.y, (currentWidth + 2) / 2, 0, Math.PI * 2)
+      ctx.fillStyle = currentColor
+      ctx.fill()
+    } else if (ctx) {
+      drawSmoothLine()
+    }
+
+    if (canvasRef.current && !hasSavedToHistory.current) {
+      hasSavedToHistory.current = true
+      setHistory(prev => [...prev, canvasRef.current!.toDataURL()])
+    }
+  }
+
+  const clearCanvas = () => {
+    if (!ctx || !canvasRef.current) return
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+    setHistory([canvasRef.current.toDataURL()])
+  }
+
+  const undo = () => {
+    if (!ctx || !canvasRef.current || history.length <= 1) return
+    const newHistory = [...history]
+    newHistory.pop()
+    setHistory(newHistory)
+    const img = new window.Image()
+    img.onload = () => ctx.drawImage(img, 0, 0)
+    img.src = newHistory[newHistory.length - 1]
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim() || !attending) {
+      setMessage({ text: t('rsvpError'), type: 'error' })
+      return
+    }
+
+    setIsSubmitting(true)
+    setMessage({ text: t('submitting'), type: 'info' })
+
+    try {
+      const formData = new FormData()
+      formData.append('type', 'rsvp')
+      formData.append('name', name.trim())
+      formData.append('attending', attending)
+      
+      // Handle optional message
+      if (messageType === 'drawn' && canvasRef.current) {
+        const blob = await new Promise<Blob | null>(res => canvasRef.current?.toBlob(res, 'image/png'))
+        if (blob) formData.append('imageFile', blob, 'drawing.png')
+      } else if (writtenText.trim()) {
+        formData.append('textMessage', writtenText.trim())
+      }
+
+      const response = await fetch('/api/send-email', { method: 'POST', body: formData })
+      const data = await response.json()
+
+      if (data.success) {
+        setMessage({ text: t('rsvpSuccess'), type: 'success' })
+        setName(''); setAttending(''); setWrittenText(''); clearCanvas()
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (error: any) {
+      setMessage({ text: error.message || t('rsvpError'), type: 'error' })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <section id="rsvp" className="relative py-8 px-4 md:py-12 bg-transparent overflow-visible">
+      <div className="max-w-4xl mx-auto text-center flex flex-col items-center relative z-10">
+        <motion.div 
+          className="mb-8 flex flex-col items-center"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+        >
+          <h2 className="font-handwritten text-5xl md:text-7xl text-[#d9675f] mb-4 tracking-tight">
+            {t('rsvpSectionTitle')}
+          </h2>
+          <p className="font-serif text-lg md:text-xl text-[#d9675f]/80 italic mt-4">
+            {t('rsvpDescription')}
+          </p>
+        </motion.div>
+        
+        <motion.div 
+          className="w-full max-w-2xl bg-transparent border border-[#d9675f]/20 rounded-lg p-8 md:p-12 shadow-sm"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+        >
+          <form onSubmit={handleSubmit} className="space-y-6 text-left">
+            <div>
+              <label className="block text-sm font-medium text-[#d9675f] mb-2 font-serif">{t('rsvpFormName')}</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 bg-transparent border border-[#d9675f]/30 rounded-lg focus:border-[#d9675f] outline-none font-serif"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#d9675f] mb-3 font-serif">{t('attendanceLabel')}</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAttending('yes')}
+                  className={`py-2 rounded-lg border font-serif transition-all ${attending === 'yes' ? 'bg-[#d9675f] text-white' : 'text-[#d9675f] border-[#d9675f]/30'}`}
+                >
+                  {t('attendingOption')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttending('no')}
+                  className={`py-2 rounded-lg border font-serif transition-all ${attending === 'no' ? 'bg-[#d9675f] text-white' : 'text-[#d9675f] border-[#d9675f]/30'}`}
+                >
+                  {t('notAttendingOption')}
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-[#d9675f]/10">
+              <label className="block text-sm font-medium text-[#d9675f] mb-4 font-serif">
+                {t('writeUsDescription')} ({t('optional') || 'Optional'})
+              </label>
+              <div className="flex gap-4 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setMessageType('written')}
+                  className={`flex-1 py-2 text-xs rounded-lg border font-serif transition-all ${messageType === 'written' ? 'bg-[#d9675f] text-white' : 'text-[#d9675f] border-[#d9675f]/30'}`}
+                >
+                  {t('writtenMessage')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageType('drawn')}
+                  className={`flex-1 py-2 text-xs rounded-lg border font-serif transition-all ${messageType === 'drawn' ? 'bg-[#d9675f] text-white' : 'text-[#d9675f] border-[#d9675f]/30'}`}
+                >
+                  {t('drawnMessage')}
+                </button>
+              </div>
+
+              {messageType === 'written' ? (
+                <textarea
+                  value={writtenText}
+                  onChange={(e) => setWrittenText(e.target.value)}
+                  placeholder={t('writeYourMessage')}
+                  className="w-full px-4 py-3 bg-transparent border border-[#d9675f]/30 rounded-lg font-serif outline-none resize-none"
+                  rows={4}
+                />
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex justify-center gap-2 mb-2">
+                    {penColors.map(p => (
+                      <button
+                        key={p.color}
+                        type="button"
+                        onClick={() => setCurrentColor(p.color)}
+                        className={`w-6 h-6 rounded-full border-2 transition-all ${currentColor === p.color ? 'border-[#d9675f] scale-110' : 'border-transparent'}`}
+                        style={{ backgroundColor: p.color }}
+                        title={p.name}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex justify-center gap-2 items-center bg-white/50 px-2 py-1 rounded-full border border-[#d9675f]/10 w-fit mx-auto">
+                    {[2,3,5,8].map(w => (
+                      <button
+                        key={w}
+                        type="button"
+                        onClick={() => setCurrentWidth(w)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${currentWidth === w ? 'bg-[#d9675f]/10' : 'hover:bg-black/5'}`}
+                      >
+                        <div 
+                          className="bg-current rounded-full transition-all" 
+                          style={{ 
+                            width: `${w + 2}px`, 
+                            height: `${w + 2}px`,
+                            backgroundColor: currentColor
+                          }} 
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border border-[#d9675f]/20 rounded-lg bg-white overflow-hidden">
+                    <canvas
+                      ref={canvasRef}
+                      onMouseDown={startDrawing}
+                      onMouseMove={draw}
+                      onMouseUp={stopDrawing}
+                      onMouseLeave={stopDrawing}
+                      onTouchStart={startDrawing}
+                      onTouchMove={draw}
+                      onTouchEnd={stopDrawing}
+                      className="w-full touch-none cursor-crosshair"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={undo} className="flex-1 py-2 text-xs border border-[#d9675f]/30 rounded-lg font-serif">{t('undo')}</button>
+                    <button type="button" onClick={clearCanvas} className="flex-1 py-2 text-xs border border-[#d9675f]/30 rounded-lg font-serif">{t('clearDrawing')}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-4 bg-[#d9675f] text-white rounded-lg font-serif text-lg font-medium hover:opacity-90 transition-all disabled:opacity-50"
+            >
+              {isSubmitting ? t('submitting') : t('rsvpFormSubmit')}
+            </button>
+
+            {message.text && (
+              <div className={`p-4 rounded-lg text-center font-serif ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                {message.text}
+              </div>
+            )}
+          </form>
+        </motion.div>
+      </div>
+    </section>
+  )
+}
+
+

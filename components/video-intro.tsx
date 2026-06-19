@@ -1,0 +1,69 @@
+"use client"
+
+import { useRef, useState } from "react"
+import { motion } from "framer-motion"
+import { useTranslation } from "@/lib/translations"
+
+interface VideoIntroProps {
+  onComplete: () => void
+  onSkip: () => void
+}
+
+export default function VideoIntro({ onComplete, onSkip }: VideoIntroProps) {
+  const t = useTranslation()
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false)
+
+  const assetsReady = isVideoReady
+
+  const handleVideoClick = () => {
+    const video = videoRef.current;
+    if (video && video.paused) {
+      video.play().then(() => {
+        setIsPlaying(true);
+      }).catch(error => {
+        console.error("Video play failed:", error);
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+      <div 
+        className="w-full h-full flex items-center justify-center bg-black relative cursor-pointer"
+        onClick={handleVideoClick}
+      >
+        <video 
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-cover md:object-contain"
+          playsInline={true}
+          muted={true}
+          autoPlay={false}
+          onEnded={onComplete}
+          onLoadedData={() => setIsVideoReady(true)}
+          onCanPlay={() => setIsVideoReady(true)}
+          preload="auto"
+          disablePictureInPicture
+          loop={false}
+        >
+          <source src="/engagement-video.mp4#t=0.001" type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </div>
+
+      {/* Tap to Continue - Visual UI only, not clickable */}
+      {!isPlaying && (
+        <motion.div
+          className="absolute inset-0 flex flex-col items-center justify-center z-50 pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: assetsReady ? 1 : 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          
+        </motion.div>
+      )}
+    </div>
+  );
+}
