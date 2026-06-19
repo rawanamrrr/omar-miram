@@ -53,7 +53,7 @@ const fastStaggerContainer: Variants = {
 export default function PhotoUploadSection() {
   const t = useTranslation()
   
-  const driveLink = ""
+  const driveLink = "https://drive.google.com/drive/folders/1VwN90MVOlKeO9zLkPeBdYIajbxtstuGA?usp=drive_link"
 
   const handleUploadClick = () => {
     if (driveLink) {
