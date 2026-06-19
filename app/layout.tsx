@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     description: "Join us in celebrating Omar & Miram's engagement",
     images: [
       {
-        url: "https://omar-and-miram.digitivaa.com/Preview.webp",
+        url: "https://omar-miram.digitivaa.com/Preview.webp",
         width: 1200,
         height: 630,
         alt: "Omar & Miram Engagement Celebration",
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Omar & Miram - Engagement Celebration",
     description: "Join us in celebrating Omar & Miram's engagement",
-    images: ["https://omar-and-miram.digitivaa.com/Preview.webp"],
+    images: ["https://omar-miram.digitivaa.com/Preview.webp"],
   },
   icons: {
     icon: "/invitation-design.jpg",
@@ -63,13 +63,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* ✅ Open Graph tags for Facebook & WhatsApp previews */}
-        <meta property="og:url" content="https://omar-and-miram.digitivaa.com/" />
+        <meta property="og:url" content="https://omar-miram.digitivaa.com/" />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="Omar & Miram - Engagement Celebration" />
         <meta property="og:description" content="Join us in celebrating Omar & Miram's engagement" />
         <meta
           property="og:image"
-          content="https://omar-and-miram.digitivaa.com/Preview.webp"
+          content="https://omar-miram.digitivaa.com/Preview.webp"
         />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -80,7 +80,7 @@ export default function RootLayout({
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Omar & Miram - Engagement Celebration" />
         <meta name="twitter:description" content="Join us in celebrating Omar & Miram's engagement" />
-        <meta name="twitter:image" content="https://omar-and-miram.digitivaa.com/Preview.webp" />
+        <meta name="twitter:image" content="https://omar-miram.digitivaa.com/Preview.webp" />
 
         {/* Preload background image */}
         <link
